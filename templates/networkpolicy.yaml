@@ -18,31 +18,20 @@ spec:
     - Ingress
     - Egress
 
-  # Allow DNS resolution
-  {{- if .Values.networkPolicy.allowDNS }}
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          k8s-app: kube-dns
-    ports:
-      - protocol: UDP
-        port: 53
-      - protocol: TCP
-        port: 53
-  {{- end }}
-
-  # Allow ingress from ingress controller
-  ingress:
-    - from:
+  egress:
+    # Allow DNS resolution
+    {{- if .Values.networkPolicy.allowDNS }}
+    - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: ingress-nginx
+              k8s-app: kube-dns
       ports:
+        - protocol: UDP
+          port: 53
         - protocol: TCP
-          port: 8080
+          port: 53
+    {{- end }}
 
-  # Allow egress to specific hosts (for MCP servers, GitHub, etc.)
-  egress:
     # Allow HTTPS to GitHub
     - to:
         - podSelector: {}
@@ -67,4 +56,14 @@ spec:
           port: 8000  # Casdoor
         - protocol: TCP
           port: 5432  # PostgreSQL
+
+  # Allow ingress from ingress controller
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
 {{- end }}
