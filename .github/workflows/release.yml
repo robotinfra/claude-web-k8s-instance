@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Package Helm chart
+        run: |
+          helm package .
+
+      - name: Generate release notes
+        run: |
+          echo "## 🚀 Release ${{ steps.version.outputs }}" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### Changes" >> release_notes.md
+          echo "See commits since last release for details." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Helm Chart" >> release_notes.md
+          echo "- Version: ${{ steps.version.outputs }}" >> release_notes.md
+          echo "- Chart: claude-web-k8s-instance" >> release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs }}
+          name: Release ${{ steps.version.outputs }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: claude-web-k8s-instance-*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
