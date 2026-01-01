@@ -1,0 +1,66 @@
+{{- if .Values.rbac.create }}
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.instanceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: serviceaccount
+  annotations:
+    description: {{ .Values.instanceDescription | quote }}
+    user-id: {{ .Values.userid | quote }}
+automountServiceAccountToken: false
+
+---
+# Role for namespace-scoped permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.instanceName }}-admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+rules:
+  # Full access to resources in instance namespace
+  - apiGroups: [""]
+    resources: ["*"]
+    verbs: ["*"]
+
+  # Full access to apps resources
+  - apiGroups: ["apps"]
+    resources: ["*"]
+    verbs: ["*"]
+
+  # Full access to networking resources
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["*"]
+    verbs: ["*"]
+
+  # Full access to batch resources
+  - apiGroups: ["batch"]
+    resources: ["*"]
+    verbs: ["*"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.instanceName }}-admin-binding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.instanceName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Values.instanceName }}-admin
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

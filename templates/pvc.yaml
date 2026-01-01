@@ -1,0 +1,41 @@
+{{- if .Values.storage.workspace.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.instanceName }}-workspace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - {{ .Values.storage.workspace.accessMode }}
+  {{- if .Values.storage.workspace.storageClass }}
+  storageClassName: {{ .Values.storage.workspace.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.workspace.size }}
+{{- end }}
+
+{{- if .Values.storage.home.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.instanceName }}-home
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - {{ .Values.storage.home.accessMode }}
+  {{- if .Values.storage.home.storageClass }}
+  storageClassName: {{ .Values.storage.home.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.home.size }}
+{{- end }}

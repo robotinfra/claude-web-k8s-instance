@@ -1,0 +1,22 @@
+{{- if .Values.database.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ .Values.instanceName }}-db
+  namespace: {{ .Values.database.namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+    instance: {{ .Values.instanceName }}
+  annotations:
+    description: {{ .Values.instanceDescription | quote }}
+    user-id: {{ .Values.userid | quote }}
+spec:
+  name: {{ default (printf "%s-db" .Values.instanceName) .Values.database.name }}
+  owner: {{ .Values.database.owner }}
+  cluster:
+    name: {{ .Values.database.cluster }}
+  instance: {{ .Values.database.instance }}
+  databaseReclaimPolicy: {{ .Values.database.reclaimPolicy }}
+{{- end }}

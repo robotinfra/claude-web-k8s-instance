@@ -1,0 +1,490 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.instanceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: deployment
+  annotations:
+    description: {{ .Values.instanceDescription | quote }}
+    user-id: {{ .Values.userid | quote }}
+    created-at: {{ now | toString | quote }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "claude-web-k8s-instance.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "claude-web-k8s-instance.serviceAccountName" . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      initContainers:
+        {{- if .Values.initContainer.enabled }}
+        - name: git-clone
+          image: "{{ .Values.initContainer.image.repository }}:{{ .Values.initContainer.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.githubToken.secretName }}
+                  key: {{ .Values.githubToken.secretKey }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Checking /workspace contents..."
+              if [ -d "/workspace/.git" ]; then
+                echo "Repository already exists, pulling latest changes..."
+                cd /workspace
+                git pull origin {{ .Values.initContainer.repository.branch }} || echo "Pull failed, continuing with existing code"
+              else
+                echo "Cloning repository..."
+                git clone -b {{ .Values.initContainer.repository.branch }} https://${GITHUB_TOKEN}@{{ .Values.initContainer.repository.url | replace "https://" "" }} /workspace
+                cd /workspace
+                echo "Repository cloned successfully"
+              fi
+              echo "Init container completed successfully"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
+
+        - name: ssh-setup
+          image: alpine/git:2.49.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Setting up SSH configuration..."
+
+              # Copy private key with proper permissions
+              cp /tmp/ssh/id_ed25519 /ssh-setup/id_ed25519
+              chmod 600 /ssh-setup/id_ed25519
+
+              # Generate public key from private key
+              ssh-keygen -y -f /ssh-setup/id_ed25519 > /ssh-setup/id_ed25519.pub
+              chmod 644 /ssh-setup/id_ed25519.pub
+
+              # Setup known hosts
+              echo "Setting up known hosts..."
+              > /ssh-setup/known_hosts
+              chmod 644 /ssh-setup/known_hosts
+
+              # Add GitHub known host
+              echo "github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=" >> /ssh-setup/known_hosts
+
+              # Set ownership to 1000:1000 for the main container
+              chown -R 1000:1000 /ssh-setup
+
+              echo "SSH setup completed successfully"
+          volumeMounts:
+            - name: ssh-private-key
+              mountPath: /tmp/ssh
+              readOnly: true
+            - name: ssh-directory
+              mountPath: /ssh-setup
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+            runAsGroup: 0
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+
+      containers:
+        # Main Claude Code container
+        - name: claude-web
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: mcp
+              containerPort: 81
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+            - name: DISABLE_AUTOUPDATER
+              value: {{ .Values.env.DISABLE_AUTOUPDATER | quote }}
+            - name: EDITOR
+              value: vim
+            - name: CLAUDE_INSTANCE_NAME
+              value: {{ .Values.instanceName }}
+            - name: CLAUDE_INSTANCE_DESCRIPTION
+              value: {{ .Values.instanceDescription }}
+            - name: CLAUDE_USERID
+              value: {{ .Values.userid }}
+            - name: CLAUDE_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.env.OTEL_SERVICE_NAME | quote }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.githubToken.secretName }}
+                  key: {{ .Values.githubToken.secretKey }}
+            {{- if .Values.features.postgres }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-db
+                  key: url
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: tmp
+              mountPath: /tmp
+            - name: home
+              mountPath: /home/code/.claude
+            - name: cache
+              mountPath: /home/code/.cache
+            - name: npm-cache
+              mountPath: /home/code/.npm
+            - name: claude-lock
+              mountPath: /home/code/.claude.json.lock
+            - name: git-config
+              mountPath: /home/code/.gitconfig
+              subPath: .gitconfig
+              readOnly: true
+            - name: ssh-directory
+              mountPath: /home/code/.ssh
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "sleep 2147483647" || exit 1
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test -d /workspace/.git
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+        # Context7 MCP Server
+        {{- if .Values.mcpServers.context7.enabled }}
+        - name: context7
+          image: "{{ .Values.mcpServers.context7.image }}:{{ .Values.mcpServers.context7.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mcp
+              containerPort: 81
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: cache
+              mountPath: /home/code/.cache
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
+
+        # Playwright Browser MCP Server
+        {{- if .Values.mcpServers.playwrightBrowser.enabled }}
+        - name: playwright-browser
+          image: "{{ .Values.mcpServers.playwrightBrowser.image }}:{{ .Values.mcpServers.playwrightBrowser.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mcp
+              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.mcp }}
+              protocol: TCP
+            - name: novnc
+              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.novnc }}
+              protocol: TCP
+            - name: vnc
+              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.vnc }}
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
+
+        # Docker Hub MCP Server
+        {{- if .Values.mcpServers.dockerhubMcp.enabled }}
+        - name: dockerhub-mcp
+          image: "{{ .Values.mcpServers.dockerhubMcp.image }}:{{ .Values.mcpServers.dockerhubMcp.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mcp
+              containerPort: 81
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
+
+        # Golang Tool (optional)
+        {{- if .Values.features.golang }}
+        - name: golang-tool
+          image: "{{ .Values.golang.image }}:{{ .Values.golang.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mcp
+              containerPort: 81
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: GOMODCACHE
+              value: /tmp/go-mod-cache
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/code/.cache
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.golang.resources | nindent 12 }}
+        {{- end }}
+
+        # TypeScript Tool (optional)
+        {{- if .Values.features.typescript }}
+        - name: typescript-tool
+          image: "{{ .Values.typescript.image }}:{{ .Values.typescript.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mcp
+              containerPort: 81
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/code
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: npm-cache
+              mountPath: /home/code/.npm
+            - name: cache
+              mountPath: /home/code/.cache
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.typescript.resources | nindent 12 }}
+        {{- end }}
+
+        # PostgreSQL Sidecar (optional)
+        {{- if .Values.features.postgres }}
+        - name: postgres
+          image: "{{ .Values.postgres.image }}:{{ .Values.postgres.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-db
+                  key: host
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-db
+                  key: user
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-db
+                  key: password
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+        {{- end }}
+
+        # Hasura GraphQL (optional)
+        {{- if .Values.features.graphql }}
+        - name: hasura
+          image: "{{ .Values.graphql.hasura.image }}:{{ .Values.graphql.hasura.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: graphql
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-hasura
+                  key: adminSecret
+            - name: HASURA_GRAPHQL_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.instanceName }}-db
+                  key: url
+            - name: HASURA_GRAPHQL_DEV_MODE
+              value: "true"
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.graphql.hasura.resources | nindent 12 }}
+        {{- end }}
+
+      volumes:
+        {{- if .Values.storage.workspace.enabled }}
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ .Values.instanceName }}-workspace
+        {{- end }}
+        {{- if .Values.storage.home.enabled }}
+        - name: home
+          persistentVolumeClaim:
+            claimName: {{ .Values.instanceName }}-home
+        {{- end }}
+        - name: git-config
+          secret:
+            secretName: git-config
+        - name: ssh-private-key
+          secret:
+            secretName: {{ .Values.ssh.privateKey.secretName }}
+            defaultMode: 0600
+        - name: ssh-directory
+          emptyDir:
+            sizeLimit: 10Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.storage.tmp.size }}
+        - name: cache
+          emptyDir:
+            sizeLimit: {{ .Values.storage.cache.size }}
+        - name: npm-cache
+          emptyDir:
+            sizeLimit: {{ .Values.storage.npmCache.size }}
+        - name: claude-lock
+          emptyDir:
+            sizeLimit: {{ .Values.storage.claudeLock.size }}

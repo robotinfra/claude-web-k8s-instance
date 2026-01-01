@@ -1,0 +1,192 @@
+# Default values for claude-web-k8s-instance
+# This chart deploys a per-instance Claude Code environment
+
+# Instance identification
+instanceName: "a1b2c3d4"  # Will be overridden by ArgoCD (hash of description)
+instanceDescription: "Backend API development"
+userid: "user123"  # User who owns this instance
+
+# Feature flags
+features:
+  golang: true
+  typescript: true
+  postgres: true
+  graphql: false
+
+# Main container image
+image:
+  repository: ghcr.io/transform-ia/claude-image
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Replica count
+replicaCount: 1
+
+# ServiceAccount settings
+serviceAccount:
+  create: true
+  automountToken: false
+
+# Storage configuration
+storage:
+  workspace:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+    accessMode: ReadWriteOnce
+  home:
+    enabled: true
+    size: 1Gi
+    storageClass: longhorn
+    accessMode: ReadWriteOnce
+  tmp:
+    size: 10Gi  # emptyDir
+  cache:
+    size: 5Gi  # emptyDir
+  npmCache:
+    size: 1Gi  # emptyDir
+  claudeLock:
+    size: 10Mi  # emptyDir
+
+# Init container for git clone
+initContainer:
+  enabled: true
+  image:
+    repository: alpine/git
+    tag: 2.49.1
+  repository:
+    url: https://github.com/robotinfra/infra
+    branch: master
+
+# GitHub token (from secret in user namespace)
+githubToken:
+  secretName: github-credentials
+  secretKey: token
+
+# Environment variables
+env:
+  TZ: America/Montreal
+  DISABLE_AUTOUPDATER: "1"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo.claude.svc.cluster.local:4318
+  OTEL_SERVICE_NAME: claude-web
+
+# SSH configuration
+ssh:
+  privateKey:
+    secretName: ssh-private-key
+  knownHosts:
+    github: true
+    custom: []
+
+# Git configuration
+gitConfig:
+  userName: "Claude Code"
+  userEmail: "claude@robotinfra.com"
+  defaultBranch: master
+
+# Resource limits
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  hostname: ""  # Defaults to {hash}.dev.robotinfra.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+# Database (CNPG) configuration
+database:
+  enabled: false  # Set to true to create CNPG Database
+  namespace: database
+  cluster: postgresql
+  name: ""  # Defaults to {instanceName}-db
+  owner: claude
+  instance: 1
+  reclaimPolicy: delete
+
+# ConfigMap for system prompt
+configMap:
+  systemPrompt: |
+    You are Claude Code, an AI programming assistant.
+    Help users with their coding tasks in this Kubernetes environment.
+
+# RBAC configuration
+rbac:
+  create: true  # Create RBAC resources (Role, RoleBinding)
+
+# Network policies
+networkPolicy:
+  enabled: true  # Enable zero-trust network policies
+  allowDNS: true
+  allowedEgressHosts:
+    - api.github.com
+    - github.com
+    - registry-1.docker.io
+
+# MCP Servers (always included)
+mcpServers:
+  context7:
+    enabled: true
+    image: transformia/context7-mcp
+    tag: "1.0.27"
+
+  playwrightBrowser:
+    enabled: true
+    image: transformia/playwright-browser
+    tag: "1.0.3"
+    ports:
+      mcp: 8831
+      novnc: 6901
+      vnc: 5900
+
+  dockerhubMcp:
+    enabled: true
+    image: ghcr.io/transform-ia/dockerhub-mcp
+    tag: "v0.17.0"
+
+# Feature-specific containers
+golang:
+  image: ghcr.io/transform-ia/golang-image
+  tag: latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+
+typescript:
+  image: ghcr.io/transform-ia/typescript-image
+  tag: latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+
+postgres:
+  image: postgres
+  tag: 16-alpine
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+
+graphql:
+  hasura:
+    image: hasura/graphql-engine
+    tag: v2.36.0
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"

@@ -1,0 +1,23 @@
+apiVersion: v2
+name: claude-web-k8s-instance
+description: Helm chart for per-instance Claude Code deployment with multi-container pods for Claude Web Kubernetes Engine
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - claude
+  - kubernetes
+  - multi-tenant
+  - instance
+  - mcp
+maintainers:
+  - name: robotinfra
+    email: infra@robotinfra.com
+home: https://github.com/robotinfra/claude-web-k8s-instance
+sources:
+  - https://github.com/robotinfra/claude-web-k8s-instance
+dependencies:
+  - name: common
+    repository: https://charts.bitnami.com/bitnami
+    version: 2.x.x
+    alias: common

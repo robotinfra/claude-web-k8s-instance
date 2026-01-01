@@ -1,0 +1,70 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy for zero-trust model
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.instanceName }}-allow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "claude-web-k8s-instance.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # Allow DNS resolution
+  {{- if .Values.networkPolicy.allowDNS }}
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+  {{- end }}
+
+  # Allow ingress from ingress controller
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+
+  # Allow egress to specific hosts (for MCP servers, GitHub, etc.)
+  egress:
+    # Allow HTTPS to GitHub
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow HTTP/HTTPS to internet
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+
+    # Allow cluster-internal communication
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000  # Casdoor
+        - protocol: TCP
+          port: 5432  # PostgreSQL
+{{- end }}
