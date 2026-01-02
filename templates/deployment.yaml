@@ -178,33 +178,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
 
         # Context7 MCP Server
+        # NOTE: Context7 is now a shared service in claude namespace, not a sidecar
         {{- if .Values.mcpServers.context7.enabled }}
-        - name: context7
-          image: "{{ .Values.mcpServers.context7.image }}:{{ .Values.mcpServers.context7.tag }}"
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: mcp
-              containerPort: 81
-              protocol: TCP
-          env:
-            - name: HOME
-              value: /home/code
-            - name: TZ
-              value: {{ .Values.env.TZ | quote }}
-          volumeMounts:
-            - name: workspace
-              mountPath: /workspace
-            - name: cache
-              mountPath: /home/code/.cache
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            capabilities:
-              drop:
-                - ALL
+        {{- fail "context7 should not be enabled as a sidecar - use the shared service in claude namespace" }}
         {{- end }}
 
 
@@ -213,12 +189,17 @@ spec:
         - name: golang-tool
           image: "{{ .Values.golang.image }}:{{ .Values.golang.tag }}"
           imagePullPolicy: IfNotPresent
+          command:
+            - "/usr/local/bin/mcp-language-server"
+            - "--lsp"
+            - "gopls"
+            - "--http"
+            - "--port"
+            - "8002"
           workingDir: /workspace
-          args:
-            - "--workspace=/workspace"
           ports:
-            - name: mcp
-              containerPort: 81
+            - name: golang-mcp
+              containerPort: 8002
               protocol: TCP
           env:
             - name: HOME
@@ -254,12 +235,21 @@ spec:
         - name: typescript-tool
           image: "{{ .Values.typescript.image }}:{{ .Values.typescript.tag }}"
           imagePullPolicy: IfNotPresent
-          workingDir: /workspace
-          args:
+          command:
+            - "/usr/local/bin/mcp-language-server"
+            - "--lsp"
+            - "typescript-language-server"
+            - "--http"
+            - "--port"
+            - "8003"
+            - "--"
             - "--workspace=/workspace"
+            - "--"
+            - "--stdio"
+          workingDir: /workspace
           ports:
-            - name: mcp
-              containerPort: 81
+            - name: typescript-mcp
+              containerPort: 8003
               protocol: TCP
           env:
             - name: HOME
@@ -271,6 +261,8 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: /workspace
+            - name: tmp
+              mountPath: /tmp
             - name: npm-cache
               mountPath: /home/code/.npm
             - name: cache

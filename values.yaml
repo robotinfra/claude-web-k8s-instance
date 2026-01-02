@@ -2,9 +2,9 @@
 # This chart deploys a per-instance Claude Code environment
 
 # Instance identification
-instanceName: "a1b2c3d4"  # Will be overridden by ArgoCD (hash of description)
+instanceName: "a1b2c3d4" # Will be overridden by ArgoCD (hash of description)
 instanceDescription: "Backend API development"
-userid: "user123"  # User who owns this instance
+userid: "user123" # User who owns this instance
 
 # Feature flags
 features:
@@ -40,14 +40,13 @@ storage:
     storageClass: longhorn
     accessMode: ReadWriteOnce
   tmp:
-    size: 10Gi  # emptyDir
+    size: 10Gi # emptyDir
   cache:
-    size: 5Gi  # emptyDir
+    size: 5Gi # emptyDir
   npmCache:
-    size: 1Gi  # emptyDir
+    size: 1Gi # emptyDir
   claudeLock:
-    size: 10Mi  # emptyDir
-
+    size: 10Mi # emptyDir
 
 # GitHub token (from secret in user namespace)
 githubToken:
@@ -93,17 +92,17 @@ service:
 ingress:
   enabled: true
   className: nginx
-  hostname: ""  # Defaults to {hash}.dev.robotinfra.com
+  hostname: "" # Defaults to {hash}.dev.robotinfra.com
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 
 # Database (CNPG) configuration
 database:
-  enabled: false  # Set to true to create CNPG Database
+  enabled: false # Set to true to create CNPG Database
   namespace: database
   cluster: postgresql
-  name: ""  # Defaults to {instanceName}-db
+  name: "" # Defaults to {instanceName}-db
   owner: claude
   instance: 1
   reclaimPolicy: delete
@@ -116,11 +115,11 @@ configMap:
 
 # RBAC configuration
 rbac:
-  create: true  # Create RBAC resources (Role, RoleBinding)
+  create: true # Create RBAC resources (Role, RoleBinding)
 
 # Network policies
 networkPolicy:
-  enabled: true  # Enable zero-trust network policies
+  enabled: true # Enable zero-trust network policies
   allowDNS: true
   allowedEgressHosts:
     - api.github.com
@@ -130,12 +129,12 @@ networkPolicy:
 # MCP Servers (always included)
 mcpServers:
   context7:
-    enabled: true
+    enabled: false # Use shared service in claude namespace, not a sidecar
     image: transformia/context7-mcp
     tag: "1.0.27"
 
   playwrightBrowser:
-    enabled: false  # Use separate deployment in claude namespace
+    enabled: false # Use separate deployment in claude namespace
     image: transformia/playwright-browser
     tag: "1.0.3"
     ports:
@@ -144,7 +143,7 @@ mcpServers:
       vnc: 5900
 
   dockerhubMcp:
-    enabled: false  # Use separate deployment in claude namespace
+    enabled: false # Use separate deployment in claude namespace
     image: ghcr.io/transform-ia/dockerhub-mcp
     tag: "v0.17.0"
 
