@@ -48,15 +48,6 @@ storage:
   claudeLock:
     size: 10Mi  # emptyDir
 
-# Init container for git clone
-initContainer:
-  enabled: true
-  image:
-    repository: alpine/git
-    tag: 2.49.1
-  repository:
-    url: https://github.com/robotinfra/infra
-    branch: master
 
 # GitHub token (from secret in user namespace)
 githubToken:
@@ -144,7 +135,7 @@ mcpServers:
     tag: "1.0.27"
 
   playwrightBrowser:
-    enabled: true
+    enabled: false  # Use separate deployment in claude namespace
     image: transformia/playwright-browser
     tag: "1.0.3"
     ports:
@@ -153,7 +144,7 @@ mcpServers:
       vnc: 5900
 
   dockerhubMcp:
-    enabled: true
+    enabled: false  # Use separate deployment in claude namespace
     image: ghcr.io/transform-ia/dockerhub-mcp
     tag: "v0.17.0"
 

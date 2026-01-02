@@ -36,48 +36,6 @@ spec:
           type: RuntimeDefault
 
       initContainers:
-        {{- if .Values.initContainer.enabled }}
-        - name: git-clone
-          image: "{{ .Values.initContainer.image.repository }}:{{ .Values.initContainer.image.tag }}"
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: TZ
-              value: {{ .Values.env.TZ | quote }}
-            - name: GITHUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.githubToken.secretName }}
-                  key: {{ .Values.githubToken.secretKey }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -e
-              echo "Checking /workspace contents..."
-              if [ -d "/workspace/.git" ]; then
-                echo "Repository already exists, pulling latest changes..."
-                cd /workspace
-                git pull origin {{ .Values.initContainer.repository.branch }} || echo "Pull failed, continuing with existing code"
-              else
-                echo "Cloning repository..."
-                git clone -b {{ .Values.initContainer.repository.branch }} https://${GITHUB_TOKEN}@{{ .Values.initContainer.repository.url | replace "https://" "" }} /workspace
-                cd /workspace
-                echo "Repository cloned successfully"
-              fi
-              echo "Init container completed successfully"
-          volumeMounts:
-            - name: workspace
-              mountPath: /workspace
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              drop:
-                - ALL
-        {{- end }}
-
         - name: ssh-setup
           image: alpine/git:2.49.1
           imagePullPolicy: IfNotPresent
@@ -212,7 +170,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - test -d /workspace/.git
+                - test -d /workspace
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -249,72 +207,15 @@ spec:
                 - ALL
         {{- end }}
 
-        # Playwright Browser MCP Server
-        {{- if .Values.mcpServers.playwrightBrowser.enabled }}
-        - name: playwright-browser
-          image: "{{ .Values.mcpServers.playwrightBrowser.image }}:{{ .Values.mcpServers.playwrightBrowser.tag }}"
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: mcp
-              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.mcp }}
-              protocol: TCP
-            - name: novnc
-              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.novnc }}
-              protocol: TCP
-            - name: vnc
-              containerPort: {{ .Values.mcpServers.playwrightBrowser.ports.vnc }}
-              protocol: TCP
-          env:
-            - name: HOME
-              value: /home/code
-            - name: TZ
-              value: {{ .Values.env.TZ | quote }}
-          volumeMounts:
-            - name: workspace
-              mountPath: /workspace
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            capabilities:
-              drop:
-                - ALL
-        {{- end }}
-
-        # Docker Hub MCP Server
-        {{- if .Values.mcpServers.dockerhubMcp.enabled }}
-        - name: dockerhub-mcp
-          image: "{{ .Values.mcpServers.dockerhubMcp.image }}:{{ .Values.mcpServers.dockerhubMcp.tag }}"
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: mcp
-              containerPort: 81
-              protocol: TCP
-          env:
-            - name: HOME
-              value: /home/code
-            - name: TZ
-              value: {{ .Values.env.TZ | quote }}
-          volumeMounts:
-            - name: workspace
-              mountPath: /workspace
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            capabilities:
-              drop:
-                - ALL
-        {{- end }}
 
         # Golang Tool (optional)
         {{- if .Values.features.golang }}
         - name: golang-tool
           image: "{{ .Values.golang.image }}:{{ .Values.golang.tag }}"
           imagePullPolicy: IfNotPresent
+          workingDir: /workspace
+          args:
+            - "--workspace=/workspace"
           ports:
             - name: mcp
               containerPort: 81
@@ -324,6 +225,8 @@ spec:
               value: /home/code
             - name: GOMODCACHE
               value: /tmp/go-mod-cache
+            - name: WORKSPACE_DIR
+              value: /workspace
             - name: TZ
               value: {{ .Values.env.TZ | quote }}
           volumeMounts:
@@ -351,6 +254,9 @@ spec:
         - name: typescript-tool
           image: "{{ .Values.typescript.image }}:{{ .Values.typescript.tag }}"
           imagePullPolicy: IfNotPresent
+          workingDir: /workspace
+          args:
+            - "--workspace=/workspace"
           ports:
             - name: mcp
               containerPort: 81
@@ -358,6 +264,8 @@ spec:
           env:
             - name: HOME
               value: /home/code
+            - name: WORKSPACE_DIR
+              value: /workspace
             - name: TZ
               value: {{ .Values.env.TZ | quote }}
           volumeMounts:
