@@ -9,3 +9,19 @@ metadata:
 data:
   system-prompt.txt: |
 {{ .Values.configMap.systemPrompt | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.instanceName }}-kubeconfigs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: kubeconfig
+data:
+  config-cc: |
+{{ .Values.kubeconfigs.clusters.cc | indent 4 }}
+  config-kind-kind: |
+{{ .Values.kubeconfigs.clusters.kindKind | indent 4 }}
+  config-default: |
+{{ .Values.kubeconfigs.clusters.defaultCluster | indent 4 }}

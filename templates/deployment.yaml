@@ -147,6 +147,22 @@ spec:
               readOnly: true
             - name: ssh-directory
               mountPath: /home/code/.ssh
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config
+              subPath: config-cc
+              readOnly: true
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config-cc
+              subPath: config-cc
+              readOnly: true
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config-kind-kind
+              subPath: config-kind-kind
+              readOnly: true
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config-default
+              subPath: config-default
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -217,6 +233,10 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /home/code/.cache
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config
+              subPath: config-cc
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -267,6 +287,10 @@ spec:
               mountPath: /home/code/.npm
             - name: cache
               mountPath: /home/code/.cache
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config
+              subPath: config-cc
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -278,6 +302,47 @@ spec:
                 - ALL
           resources:
             {{- toYaml .Values.typescript.resources | nindent 12 }}
+        {{- end }}
+
+        # Ansible Tool (optional)
+        {{- if .Values.features.ansible }}
+        - name: ansible
+          image: "{{ .Values.ansible.image }}:{{ .Values.ansible.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          workingDir: /workspace
+          env:
+            - name: HOME
+              value: /home/code
+            - name: ANSIBLE_HOME
+              value: /home/code/.ansible
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "False"
+            - name: WORKSPACE_DIR
+              value: /workspace
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: ssh-directory
+              mountPath: /home/code/.ssh
+            - name: kubeconfigs
+              mountPath: /home/code/.kube/config
+              subPath: config-cc
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/code/.cache
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            {{- toYaml .Values.ansible.resources | nindent 12 }}
         {{- end }}
 
         # PostgreSQL Sidecar (optional)
@@ -369,6 +434,10 @@ spec:
         - name: git-config
           secret:
             secretName: git-config
+        - name: kubeconfigs
+          configMap:
+            name: {{ .Values.instanceName }}-kubeconfigs
+            defaultMode: 0600
         - name: ssh-private-key
           secret:
             secretName: {{ .Values.ssh.privateKey.secretName }}
