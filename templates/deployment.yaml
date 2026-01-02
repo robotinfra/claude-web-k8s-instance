@@ -85,7 +85,7 @@ spec:
 
       containers:
         # Main Claude Code container
-        - name: claude-web
+        - name: claude
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
