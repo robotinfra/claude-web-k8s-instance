@@ -20,8 +20,8 @@ metadata:
     app.kubernetes.io/component: kubeconfig
 data:
   config-cc: |
-{{ .Values.kubeconfigs.clusters.cc | indent 4 }}
+{{ .Values.kubeconfigs.clusters.cc }}
   config-kind-kind: |
-{{ .Values.kubeconfigs.clusters.kindKind | indent 4 }}
+{{ .Values.kubeconfigs.clusters.kindKind }}
   config-default: |
-{{ .Values.kubeconfigs.clusters.defaultCluster | indent 4 }}
+{{ .Values.kubeconfigs.clusters.defaultCluster }}
