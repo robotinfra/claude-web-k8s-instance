@@ -118,13 +118,11 @@ spec:
               value: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.env.OTEL_SERVICE_NAME | quote }}
-            {{- if .Values.github.existingSecret }}
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.githubToken.secretName }}
                   key: {{ .Values.githubToken.secretKey }}
-            {{- end }}
             {{- if .Values.features.postgres }}
             - name: DATABASE_URL
               valueFrom:
