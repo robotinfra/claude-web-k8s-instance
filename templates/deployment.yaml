@@ -218,6 +218,8 @@ spec:
             - "--http"
             - "--port"
             - "8002"
+            - "--"
+            - "--workspace=/workspace"
           workingDir: /workspace
           ports:
             - name: golang-mcp
