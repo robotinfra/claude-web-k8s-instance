@@ -155,19 +155,7 @@ spec:
             {{- end }}
             - name: kubeconfigs
               mountPath: /home/code/.kube/config
-              subPath: config-cc
-              readOnly: true
-            - name: kubeconfigs
-              mountPath: /home/code/.kube/config-cc
-              subPath: config-cc
-              readOnly: true
-            - name: kubeconfigs
-              mountPath: /home/code/.kube/config-kind-kind
-              subPath: config-kind-kind
-              readOnly: true
-            - name: kubeconfigs
-              mountPath: /home/code/.kube/config-default
-              subPath: config-default
+              subPath: config
               readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
@@ -243,7 +231,7 @@ spec:
               mountPath: /home/code/.cache
             - name: kubeconfigs
               mountPath: /home/code/.kube/config
-              subPath: config-cc
+              subPath: config
               readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
@@ -297,7 +285,7 @@ spec:
               mountPath: /home/code/.cache
             - name: kubeconfigs
               mountPath: /home/code/.kube/config
-              subPath: config-cc
+              subPath: config
               readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
@@ -337,7 +325,7 @@ spec:
               mountPath: /home/code/.ssh
             - name: kubeconfigs
               mountPath: /home/code/.kube/config
-              subPath: config-cc
+              subPath: config
               readOnly: true
             - name: tmp
               mountPath: /tmp

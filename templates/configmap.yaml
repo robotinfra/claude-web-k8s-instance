@@ -19,9 +19,5 @@ metadata:
     {{- include "claude-web-k8s-instance.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: kubeconfig
 data:
-  config-cc: |
-{{ .Values.kubeconfigs.clusters.cc }}
-  config-kind-kind: |
-{{ .Values.kubeconfigs.clusters.kindKind }}
-  config-default: |
-{{ .Values.kubeconfigs.clusters.defaultCluster }}
+  config: |
+{{ .Values.kubeconfigs.mergedConfig | indent 4 }}
